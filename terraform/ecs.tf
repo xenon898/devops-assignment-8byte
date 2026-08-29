@@ -19,7 +19,7 @@ resource "aws_ecs_task_definition" "app" {
   container_definitions = jsonencode([
     {
       name      = "app"
-      image     = "414904928510.dkr.ecr.ap-south-1.amazonaws.com/devops-assignment-8byte-app:latest"
+      image     = "414904928510.dkr.ecr.ap-south-1.amazonaws.com/devops-assignment-8byte-app:${var.image_tag}"
       essential = true
 
       portMappings = [

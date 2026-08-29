@@ -3,3 +3,13 @@ variable "aws_region" {
   type        = string
   default     = "ap-south-1"
 }
+variable "db_password" {
+  description = "Password for the PostgreSQL RDS instance"
+  type        = string
+  sensitive   = true
+}
+variable "image_tag" {
+  description = "Docker image tag used by ECS"
+  type        = string
+  default     = "latest"
+}
