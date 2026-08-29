@@ -16,6 +16,7 @@ env:
   ECR_REPOSITORY: devops-assignment-8byte-app
   ECS_CLUSTER: devops-assignment-8byte-cluster
   ECS_SERVICE: devops-assignment-8byte-service
+  ECS_TASK_FAMILY: devops-assignment-8byte-app
 
 jobs:
 
@@ -68,7 +69,6 @@ jobs:
         run: |
           docker build --no-cache --pull \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
-            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest \
             ./app
 
       - name: Scan Docker image
@@ -84,9 +84,6 @@ jobs:
         run: |
           docker push \
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-
-          docker push \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
 
 
   deploy-staging:
@@ -107,12 +104,33 @@ jobs:
         run: |
           aws sts get-caller-identity
 
-      - name: Deploy to ECS
+      - name: Deploy new image to ECS
         run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IMAGE="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:$GITHUB_SHA"
+          echo "Deploying image: $IMAGE"
+
+          # ECR tags are immutable, so roll out by registering a new task
+          # definition revision that points at the new image digest.
+          aws ecs describe-task-definition \
+            --task-definition "$ECS_TASK_FAMILY" \
+            --query 'taskDefinition' --output json > taskdef.json
+
+          jq --arg IMAGE "$IMAGE" '
+            .containerDefinitions[0].image = $IMAGE
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy)
+          ' taskdef.json > new-taskdef.json
+
+          NEW_TD_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-taskdef.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered $NEW_TD_ARN"
+
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
-            --force-new-deployment
+            --task-definition "$NEW_TD_ARN"
 
       - name: Wait for ECS deployment
         run: |
@@ -152,6 +170,9 @@ jobs:
 
       - name: Deploy to Production
         run: |
+          # Staging and production share one ECS service in this project, so the
+          # new image is already live on the current task definition after the
+          # staging job. This gated step forces a fresh rollout of it.
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \

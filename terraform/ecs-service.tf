@@ -26,6 +26,13 @@ resource "aws_ecs_service" "app" {
     aws_lb_listener.http
   ]
 
+  # The CI/CD pipeline rolls out new images by registering new task definition
+  # revisions and pointing the service at them. Ignore that drift here so
+  # `terraform apply` does not revert deployments.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
+
   tags = {
     Name        = "${local.project_name}-service"
     Environment = local.environment
