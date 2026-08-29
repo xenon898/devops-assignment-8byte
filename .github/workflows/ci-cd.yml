@@ -1,3 +1,90 @@
+ name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: devops-assignment-8byte-app
+  ECS_CLUSTER: devops-assignment-8byte-cluster
+  ECS_SERVICE: devops-assignment-8byte-service
+
+jobs:
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt
+          pip install pytest
+
+      - name: Run unit tests
+        run: |
+          python -m pytest tests -v
+
+
+  build:
+    name: Build Scan and Push
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+            ./app
+
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      - name: Push Docker image
+        run: |
+          docker push \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+
   deploy-staging:
     name: Deploy to Staging
     needs: build
@@ -12,70 +99,12 @@
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Download current ECS task definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition devops-assignment-8byte-app \
-            --query taskDefinition \
-            > task-definition.json
-
-      - name: Update task definition with new image
-        run: |
-          IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
-
-          python - <<'PY'
-          import json
-          import os
-
-          with open("task-definition.json") as f:
-              task = json.load(f)
-
-          image = os.environ["IMAGE"]
-
-          for container in task["containerDefinitions"]:
-              if container["name"] == "app":
-                  container["image"] = image
-
-          fields = [
-              "family",
-              "taskRoleArn",
-              "executionRoleArn",
-              "networkMode",
-              "containerDefinitions",
-              "volumes",
-              "placementConstraints",
-              "requiresCompatibilities",
-              "cpu",
-              "memory",
-              "runtimePlatform"
-          ]
-
-          cleaned = {k: task[k] for k in fields if k in task}
-
-          with open("task-definition-new.json", "w") as f:
-              json.dump(cleaned, f)
-          PY
-
-      - name: Register new task definition
-        id: task-def
-        run: |
-          TASK_DEFINITION=$(aws ecs register-task-definition \
-            --cli-input-json file://task-definition-new.json \
-            --query "taskDefinition.taskDefinitionArn" \
-            --output text)
-
-          echo "TASK_DEFINITION=$TASK_DEFINITION" >> "$GITHUB_ENV"
-
-      - name: Deploy new task definition
+      - name: Deploy to ECS staging
         run: |
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
-            --task-definition "$TASK_DEFINITION"
+            --force-new-deployment
 
       - name: Wait for ECS deployment
         run: |
@@ -84,6 +113,45 @@
             --services "$ECS_SERVICE"
 
       - name: Verify ECS service
+        run: |
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query "services[0].{Status:status,Running:runningCount,Desired:desiredCount,TaskDefinition:taskDefinition}" \
+            --output table
+
+
+  deploy-production:
+    name: Deploy to Production
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: production
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to Production
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment
+
+      - name: Wait for Production Deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+      - name: Verify Production ECS service
         run: |
           aws ecs describe-services \
             --cluster "$ECS_CLUSTER" \
