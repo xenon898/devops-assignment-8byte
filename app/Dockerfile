@@ -4,12 +4,12 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-RUN python -m pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir --force-reinstall --upgrade \
-        "setuptools>=78.1.1" \
-        "msgpack>=1.2.1" \
-    && python -c "import msgpack, setuptools; print('msgpack:', msgpack.__version__); print('setuptools:', setuptools.__version__)" \
+# Install runtime dependencies, then remove pip/setuptools/wheel from the final
+# image. Flask and gunicorn do not need them at runtime, and their vendored
+# copies (pip bundles setuptools 70.3.0 and msgpack) are what Trivy flags.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && python -m pip uninstall -y setuptools wheel \
+    && python -m pip uninstall -y pip \
     && rm -rf /root/.cache/pip
 
 COPY app.py .

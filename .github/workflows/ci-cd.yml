@@ -71,16 +71,6 @@ jobs:
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest \
             ./app
 
-      - name: Verify Python packages
-        run: |
-          docker run --rm \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
-            python -c "import msgpack, setuptools; print('msgpack:', msgpack.__version__); print('setuptools:', setuptools.__version__)"
-          echo "---- full pip list from built image ----"
-          docker run --rm \
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
-            pip list
-
       - name: Scan Docker image
         uses: aquasecurity/trivy-action@master
         with:
