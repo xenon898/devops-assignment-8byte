@@ -116,8 +116,18 @@ jobs:
             --task-definition "$ECS_TASK_FAMILY" \
             --query 'taskDefinition' --output json > taskdef.json
 
+          # Swap in the new image. Also pin the container health check to a
+          # Python probe: the slim base image has no curl, and a curl-based
+          # check keeps every task UNHEALTHY so the service never stabilizes.
           jq --arg IMAGE "$IMAGE" '
             .containerDefinitions[0].image = $IMAGE
+            | .containerDefinitions[0].healthCheck = {
+                "command": ["CMD-SHELL", "python -c \"import sys,urllib.request; urllib.request.urlopen(sys.argv[1])\" http://localhost:8080/health || exit 1"],
+                "interval": 30,
+                "timeout": 5,
+                "retries": 3,
+                "startPeriod": 15
+              }
             | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
                   .compatibilities, .registeredAt, .registeredBy)
           ' taskdef.json > new-taskdef.json
