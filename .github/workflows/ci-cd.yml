@@ -53,6 +53,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -99,7 +102,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy to ECS staging
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+
+      - name: Deploy to ECS
         run: |
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
@@ -117,7 +124,7 @@ jobs:
           aws ecs describe-services \
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE" \
-            --query "services[0].{Status:status,Running:runningCount,Desired:desiredCount,TaskDefinition:taskDefinition}" \
+            --query "services[0].{Status:status,Running:runningCount,Desired:desiredCount}" \
             --output table
 
 
@@ -136,7 +143,11 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ap-south-1
+
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
 
       - name: Deploy to Production
         run: |
@@ -150,11 +161,3 @@ jobs:
           aws ecs wait services-stable \
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE"
-
-      - name: Verify Production ECS service
-        run: |
-          aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE" \
-            --query "services[0].{Status:status,Running:runningCount,Desired:desiredCount,TaskDefinition:taskDefinition}" \
-            --output table
