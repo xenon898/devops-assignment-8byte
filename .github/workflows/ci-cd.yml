@@ -19,9 +19,6 @@ env:
 
 jobs:
 
-  # ============================================================
-  # 1. TESTS
-  # ============================================================
   test:
     name: Run Tests
     runs-on: ubuntu-latest
@@ -46,9 +43,6 @@ jobs:
           python -m pytest tests -v
 
 
-  # ============================================================
-  # 2. BUILD + SECURITY SCAN + PUSH
-  # ============================================================
   build:
     name: Build Scan and Push
     needs: test
@@ -72,7 +66,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build \
+          docker build --no-cache --pull \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
             -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest \
             ./app
@@ -82,6 +76,10 @@ jobs:
           docker run --rm \
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
             python -c "import msgpack, setuptools; print('msgpack:', msgpack.__version__); print('setuptools:', setuptools.__version__)"
+          echo "---- full pip list from built image ----"
+          docker run --rm \
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+            pip list
 
       - name: Scan Docker image
         uses: aquasecurity/trivy-action@master
@@ -101,9 +99,6 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
 
 
-  # ============================================================
-  # 3. DEPLOY TO STAGING
-  # ============================================================
   deploy-staging:
     name: Deploy to Staging
     needs: build
@@ -144,9 +139,6 @@ jobs:
             --output table
 
 
-  # ============================================================
-  # 4. PRODUCTION APPROVAL + DEPLOYMENT
-  # ============================================================
   deploy-production:
     name: Deploy to Production
     needs: deploy-staging
