@@ -13,9 +13,9 @@ permissions:
 
 jobs:
 
-  # -------------------------
-  # 1. Tests
-  # -------------------------
+  # ============================================================
+  # 1. TESTS
+  # ============================================================
   test:
     name: Run Tests
     runs-on: ubuntu-latest
@@ -40,9 +40,9 @@ jobs:
           python -m pytest tests -v
 
 
-  # -------------------------
-  # 2. Build Docker Image
-  # -------------------------
+  # ============================================================
+  # 2. BUILD + SECURITY SCAN
+  # ============================================================
   build:
     name: Build Docker Image
     needs: test
@@ -55,7 +55,9 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t devops-assignment:${{ github.sha }} ./app
+          docker build \
+            -t devops-assignment:${{ github.sha }} \
+            ./app
 
       - name: Scan Docker image
         uses: aquasecurity/trivy-action@master
@@ -67,9 +69,9 @@ jobs:
           severity: CRITICAL,HIGH
 
 
-  # -------------------------
-  # 3. Deploy to Staging
-  # -------------------------
+  # ============================================================
+  # 3. DEPLOY TO STAGING
+  # ============================================================
   deploy-staging:
     name: Deploy to Staging
     needs: build
@@ -85,26 +87,42 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ap-south-1
 
-      - name: Deploy
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+
+      - name: Deploy to ECS staging
         run: |
           echo "Deploying application to staging..."
           echo "AWS ECS deployment will be configured here."
 
 
-  # -------------------------
-  # 4. Production Approval
-  # -------------------------
+  # ============================================================
+  # 4. PRODUCTION APPROVAL
+  # ============================================================
   deploy-production:
     name: Deploy to Production
     needs: deploy-staging
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+
     environment:
       name: production
 
     steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+
       - name: Production deployment
         run: |
           echo "Production deployment approved."
