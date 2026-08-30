@@ -1,32 +1,30 @@
 # 8Byte.ai DevOps Assignment
 
-## Overview
+This project demonstrates an end-to-end DevOps setup on AWS using Terraform, Docker, GitHub Actions, Amazon ECS Fargate, Amazon RDS PostgreSQL, Application Load Balancer, and Amazon CloudWatch.
 
-This project implements an end-to-end DevOps environment on AWS using Terraform, Docker, GitHub Actions, Amazon ECS Fargate, Amazon RDS PostgreSQL, Application Load Balancer, and Amazon CloudWatch.
-
-The objective was to provision the infrastructure using Infrastructure as Code, automate application testing and deployment, implement container security scanning, and provide centralized monitoring and logging.
+The main goal of the project was to provision the AWS infrastructure using Terraform, automate testing and deployments with GitHub Actions, scan the Docker image for security vulnerabilities, and set up monitoring and centralized logging.
 
 ## Architecture
 
-The application is deployed using the following architecture:
+The application is deployed using the following AWS services and tools:
 
 - AWS VPC with public and private subnets
-- Application Load Balancer for external application access
-- Amazon ECS Fargate for containerized application hosting
-- Amazon ECR for Docker image storage
-- Amazon RDS PostgreSQL for the database
+- Application Load Balancer for external access
+- Amazon ECS Fargate for running the application containers
+- Amazon ECR for storing Docker images
+- Amazon RDS PostgreSQL for the application database
 - Amazon CloudWatch Logs for centralized container logging
-- Amazon CloudWatch dashboards for application and database monitoring
-- GitHub Actions for CI/CD automation
+- CloudWatch dashboards for application and database monitoring
+- GitHub Actions for CI/CD
 - Terraform for infrastructure provisioning
 
-Application traffic flows through the Application Load Balancer to the ECS Fargate service. The ECS service runs two tasks for availability. The PostgreSQL database is hosted on Amazon RDS and is not publicly accessible.
+Application traffic is received by the Application Load Balancer and forwarded to the ECS Fargate service. The ECS service is configured to run two tasks. The PostgreSQL database is hosted on Amazon RDS in the private network and is not publicly accessible.
 
 ## Infrastructure Provisioning
 
 Terraform is used to provision and manage the AWS infrastructure.
 
-The infrastructure includes:
+The main resources provisioned include:
 
 - VPC and networking
 - Public and private subnets
@@ -44,7 +42,7 @@ The infrastructure includes:
 - CloudWatch log group
 - CloudWatch dashboards
 
-Terraform validation and planning were performed after deployment to verify that the configuration is valid and matches the deployed infrastructure.
+After deployment, I ran `terraform validate` to check the configuration and `terraform plan` to compare the Terraform configuration with the deployed infrastructure. The plan reported no changes.
 
 ## Application
 
@@ -54,7 +52,7 @@ The Docker image uses Python 3.11 on Debian Bookworm and runs the application us
 
 The container runs as a non-root user (`appuser`).
 
-The application exposes:
+The application exposes two endpoints:
 
 - `/` - Application endpoint
 - `/health` - Health check endpoint
