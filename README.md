@@ -1,4 +1,4 @@
-# 8Byte.ai DevOps Assignment
+# 
 
 This project demonstrates an end-to-end DevOps setup on AWS using Terraform, Docker, GitHub Actions, Amazon ECS Fargate, Amazon RDS PostgreSQL, Application Load Balancer, and Amazon CloudWatch.
 
